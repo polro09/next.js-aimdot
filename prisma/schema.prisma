@@ -1,0 +1,117 @@
+// prisma/schema.prisma - 데이터베이스 스키마 정의
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth 필수 모델들
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  
+  // Discord 특화 필드들
+  discordId     String?   @unique
+  username      String?
+  discriminator String?
+  avatar        String?
+  nickname      String?
+  lastActive    DateTime  @default(now())
+  
+  accounts Account[]
+  sessions Session[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// 봇 관련 모델들
+model ActivityLog {
+  id        String   @id @default(cuid())
+  type      String   // 'login', 'party_created', 'user_joined', etc.
+  message   String
+  userId    String?
+  username  String?
+  severity  String   @default("info") // 'info', 'warning', 'error'
+  metadata  String?  // JSON 문자열
+  timestamp DateTime @default(now())
+  
+  @@index([timestamp])
+  @@index([type])
+  @@index([userId])
+}
+
+model GameParty {
+  id          String   @id @default(cuid())
+  name        String
+  game        String
+  hostId      String
+  hostUsername String
+  members     String   // JSON 배열 문자열
+  maxMembers  Int      @default(5)
+  status      String   @default("recruiting") // 'recruiting', 'active', 'full', 'ended'
+  description String?
+  requirements String? // JSON 배열 문자열
+  
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  endedAt   DateTime?
+  
+  @@index([status])
+  @@index([hostId])
+  @@index([game])
+}
+
+model BotStatus {
+  id       String   @id @default("singleton")
+  status   String   @default("offline") // 'online', 'offline', 'maintenance'
+  uptime   Int      @default(0)
+  guilds   Int      @default(0)
+  users    Int      @default(0)
+  latency  Int      @default(0)
+  version  String   @default("1.0.0")
+  lastPing DateTime @default(now())
+  
+  updatedAt DateTime @updatedAt
+}
