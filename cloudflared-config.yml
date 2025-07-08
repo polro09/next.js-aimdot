@@ -1,0 +1,127 @@
+# Cloudflare Tunnel Configuration
+tunnel: 1ea3476a-aef1-424b-95c6-006252b535cc
+credentials-file: C:\Users\AD\.cloudflared\1ea3476a-aef1-424b-95c6-006252b535cc.json
+
+# 로그 설정
+loglevel: info
+transport-loglevel: warn
+
+# 연결 설정
+protocol: quic
+no-autoupdate: false
+
+# 메트릭스 설정 (선택사항)
+metrics: 0.0.0.0:8080
+
+# 라우팅 규칙
+ingress:
+  # 메인 도메인 - Next.js 웹 애플리케이션
+  - hostname: aimdot.dev
+    service: http://localhost:3000
+    originRequest:
+      httpHostHeader: aimdot.dev
+      connectTimeout: 30s
+      noTLSVerify: false
+      
+  # www 서브도메인 - 메인 도메인으로 리다이렉트
+  - hostname: www.aimdot.dev
+    service: http://localhost:3000
+    originRequest:
+      httpHostHeader: aimdot.dev
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # API 전용 서브도메인 (필요시)
+  - hostname: api.aimdot.dev
+    service: http://localhost:3000
+    path: /api/*
+    originRequest:
+      httpHostHeader: aimdot.dev
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # 관리자 대시보드 서브도메인 (필요시)
+  - hostname: admin.aimdot.dev
+    service: http://localhost:3000
+    path: /admin/*
+    originRequest:
+      httpHostHeader: aimdot.dev
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # 문서 서브도메인 (필요시)
+  - hostname: docs.aimdot.dev
+    service: http://localhost:3000
+    path: /docs/*
+    originRequest:
+      httpHostHeader: aimdot.dev
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # 봇 상태 페이지 (필요시)
+  - hostname: status.aimdot.dev
+    service: http://localhost:3000
+    path: /status/*
+    originRequest:
+      httpHostHeader: aimdot.dev
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # 개발 환경 서브도메인 (개발 시에만 사용)
+  - hostname: dev.aimdot.dev
+    service: http://localhost:3001
+    originRequest:
+      httpHostHeader: dev.aimdot.dev
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # 기본 폴백 - 404 에러
+  - service: http_status:404
+
+# 선택적 설정들
+
+# 압축 설정
+warp-routing:
+  enabled: false
+
+# 보안 설정  
+# (Cloudflare Access를 사용하는 경우)
+# access:
+#   required: true
+#   team: your-team-name
+#   audTag: your-audit-tag
+
+# 헬스체크 설정
+# retries: 3
+# grace-period: 30s
+
+# 캐시 설정 (CDN 캐시 무효화)
+# originRequest:
+#   caPool: /path/to/certificate/pool
+#   noTLSVerify: false
+#   disableChunkedEncoding: false
+#   bastionMode: false
+#   proxyAddress: 127.0.0.1
+#   proxyPort: 0
+#   proxyType: ""
+#   ipRules: []
+#   connectTimeout: 30s
+#   tlsTimeout: 10s
+#   tcpKeepAlive: 30s
+#   keepAliveConnections: 100
+#   keepAliveTimeout: 90s
+#   httpHostHeader: ""
+#   originServerName: ""
+
+# 고급 라우팅 설정 예제
+# ingress:
+#   - hostname: aimdot.dev
+#     path: /webhook/*
+#     service: http://localhost:3000
+#     originRequest:
+#       httpHostHeader: aimdot.dev
+#   - hostname: aimdot.dev  
+#     path: /api/bot/*
+#     service: http://localhost:3001
+#   - hostname: aimdot.dev
+#     service: http://localhost:3000
