@@ -42,12 +42,7 @@
     "node_modules",
     "bot/**/*.js"
   ]
-=======
-{
-  "compilerOptions": {
-    "lib": ["dom", "dom.iterable", "es6"],
-    "allowJs": true,
-    "skipLibCheck": true,
+}
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
@@ -86,5 +81,4 @@
     "node_modules",
     "bot/**/*.js"
   ]
->>>>>>> 3b599428ec14d20c82b0789575df317f455352b8
 }
