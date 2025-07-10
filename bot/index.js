@@ -103,7 +103,58 @@ async function loadEvents() {
     }
 }
 
-// 봇 준비 이벤트 (ready.js 파일로 이동됨)
+// 슬래시 명령어 등록 함수
+async function registerSlashCommands() {
+    try {
+        const commands = [];
+        client.commands.forEach(command => {
+            commands.push(command.data.toJSON());
+        });
+
+        const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+        logger.info('슬래시 명령어 등록 시작...');
+
+        // 글로벌 명령어 등록
+        await rest.put(
+            Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
+            { body: commands }
+        );
+
+        logger.success('슬래시 명령어가 성공적으로 등록되었습니다.');
+    } catch (error) {
+        logger.error(`슬래시 명령어 등록 실패: ${error.message}`);
+    }
+}
+
+// 봇 상태 업데이트 함수
+async function updateBotStatus() {
+    try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/bot/status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.BOT_API_SECRET}`
+            },
+            body: JSON.stringify({
+                status: 'online',
+                uptime: process.uptime(),
+                guilds: client.guilds.cache.size,
+                users: client.users.cache.size,
+                latency: client.ws.ping,
+                version: '1.0.0'
+            })
+        });
+
+        if (!response.ok) {
+            logger.error(`봇 상태 업데이트 실패: ${response.status}`);
+        }
+    } catch (error) {
+        logger.error(`봇 상태 업데이트 오류: ${error.message}`);
+    }
+}
+
+// 봇 준비 이벤트
 client.once('ready', async () => {
     logger.success(`${client.user.tag}이(가) 온라인 상태입니다!`);
     logger.info(`${client.guilds.cache.size}개 서버에서 활동 중`);
@@ -138,6 +189,10 @@ client.once('ready', async () => {
         // 슬래시 명령어 등록
         await registerSlashCommands();
         
+        // 봇 상태 업데이트 (주기적으로)
+        await updateBotStatus();
+        setInterval(updateBotStatus, 30000); // 30초마다 업데이트
+        
     } catch (error) {
         logger.error(`초기화 중 오류: ${error.message}`);
     }
@@ -168,22 +223,22 @@ client.on('guildCreate', async (guild) => {
                     {
                         name: '🚀 시작하기',
                         value: '`/도움말` 명령어로 사용법을 확인하세요!',
-                        inline: false
+                        inline: true
                     },
                     {
-                        name: '💡 주요 기능',
-                        value: '• 게임 파티 생성 및 관리\n• 스케줄 설정\n• 참가자 관리\n• 알림 기능',
-                        inline: false
+                        name: '⚙️ 설정',
+                        value: '`/설정` 명령어로 서버 설정을 변경하세요.',
+                        inline: true
                     },
                     {
-                        name: '🌐 웹 대시보드',
-                        value: '[aimdot.dev](https://aimdot.dev)에서 더 많은 기능을 사용하세요!',
+                        name: '🔗 웹 대시보드',
+                        value: '[Aimdot.dev](https://aimdot.dev)에서 더 많은 기능을 사용하세요!',
                         inline: false
                     }
                 ],
                 thumbnail: { url: 'https://i.imgur.com/Sd8qK9c.gif' },
                 footer: {
-                    text: 'Aimdot.dev',
+                    text: 'Aimdot.dev | 문의: support@aimdot.dev',
                     icon_url: 'https://i.imgur.com/Sd8qK9c.gif'
                 },
                 timestamp: new Date().toISOString()
@@ -192,188 +247,127 @@ client.on('guildCreate', async (guild) => {
             await guild.systemChannel.send({ embeds: [welcomeEmbed] });
         }
         
-        // 로그 기록
-        await DatabaseUtils.createLog({
-            guildId: guild.id,
-            action: 'bot_joined',
-            details: {
-                guildName: guild.name,
-                memberCount: guild.memberCount
-            },
-            level: 'info'
-        });
-        
     } catch (error) {
-        logger.error(`길드 조인 처리 중 오류: ${error.message}`);
+        logger.error(`길드 조인 처리 오류: ${error.message}`);
     }
 });
 
-// 길드 탈퇴 이벤트
+// 길드 나가기 이벤트
 client.on('guildDelete', async (guild) => {
+    logger.event(`서버 퇴장: ${guild.name} (ID: ${guild.id})`);
+    
+    // 데이터베이스에서 서버 정보 비활성화 (삭제하지 않음)
     try {
-        logger.event(`서버 탈퇴: ${guild.name} (ID: ${guild.id})`);
-        
-        // 데이터베이스에서 비활성화 (삭제하지 않고 비활성화만)
-        await Guild.updateOne(
-            { guildId: guild.id },
-            { isActive: false, lastActivity: new Date() }
-        );
-        
+        await DatabaseUtils.deactivateGuild(guild.id);
         logger.database(`서버 비활성화 완료: ${guild.name}`);
-        
-        // 로그 기록
-        await DatabaseUtils.createLog({
-            guildId: guild.id,
-            action: 'bot_left',
-            details: {
-                guildName: guild.name
-            },
-            level: 'info'
-        });
-        
     } catch (error) {
-        logger.error(`길드 탈퇴 처리 중 오류: ${error.message}`);
+        logger.error(`서버 비활성화 오류: ${error.message}`);
     }
 });
 
-// 슬래시 명령어 등록 함수
-async function registerSlashCommands() {
-    const commands = [];
-    
-    // 명령어 데이터 수집
-    client.commands.forEach(command => {
-        if (command.data) {
-            commands.push(command.data.toJSON());
+// 상호작용 생성 이벤트
+client.on('interactionCreate', async (interaction) => {
+    // 명령어 처리
+    if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        
+        if (!command) {
+            logger.warn(`알 수 없는 명령어: ${interaction.commandName}`);
+            return;
         }
-    });
-    
-    if (commands.length > 0) {
+        
+        // 쿨다운 체크
+        const { cooldowns } = client;
+        if (!cooldowns.has(command.data.name)) {
+            cooldowns.set(command.data.name, new Collection());
+        }
+        
+        const now = Date.now();
+        const timestamps = cooldowns.get(command.data.name);
+        const defaultCooldownDuration = 3;
+        const cooldownAmount = (command.cooldown ?? defaultCooldownDuration) * 1000;
+        
+        if (timestamps.has(interaction.user.id)) {
+            const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
+            
+            if (now < expirationTime) {
+                const expiredTimestamp = Math.round(expirationTime / 1000);
+                return interaction.reply({
+                    content: `⏱️ 잠시만요! \`${command.data.name}\` 명령어는 <t:${expiredTimestamp}:R>에 다시 사용할 수 있습니다.`,
+                    ephemeral: true
+                });
+            }
+        }
+        
+        timestamps.set(interaction.user.id, now);
+        setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
+        
         try {
-            // 글로벌 명령어 등록
-            await client.application.commands.set(commands);
-            logger.success(`${commands.length}개의 슬래시 명령어가 등록되었습니다.`);
+            logger.command(`${interaction.user.tag}이(가) ${interaction.commandName} 명령어 실행`);
+            await command.execute(interaction);
         } catch (error) {
-            logger.error(`슬래시 명령어 등록 실패: ${error.message}`);
+            logger.error(`명령어 실행 오류: ${error.message}`);
+            
+            const errorReply = {
+                content: '❌ 명령어 실행 중 오류가 발생했습니다.',
+                ephemeral: true
+            };
+            
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(errorReply);
+            } else {
+                await interaction.reply(errorReply);
+            }
         }
     }
-}
-
-// 상호작용 이벤트 처리
-client.on('interactionCreate', async interaction => {
-    try {
-        // 슬래시 명령어 처리
-        if (interaction.isChatInputCommand()) {
-            const command = client.commands.get(interaction.commandName);
-            
-            if (!command) {
-                logger.warn(`알 수 없는 명령어: ${interaction.commandName}`);
-                return;
-            }
-            
-            // 사용자 초기화
-            try {
-                await DatabaseUtils.initializeUser({
-                    userId: interaction.user.id,
-                    username: interaction.user.username,
-                    discriminator: interaction.user.discriminator,
-                    avatar: interaction.user.avatarURL()
-                });
-            } catch (userError) {
-                logger.warn(`사용자 초기화 실패: ${userError.message}`);
-            }
-            
-            // 쿨다운 체크
-            const cooldowns = client.cooldowns;
-            
-            if (!cooldowns.has(command.data.name)) {
-                cooldowns.set(command.data.name, new Collection());
-            }
-            
-            const now = Date.now();
-            const timestamps = cooldowns.get(command.data.name);
-            const cooldownAmount = (command.cooldown || 3) * 1000;
-            
-            if (timestamps.has(interaction.user.id)) {
-                const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
-                
-                if (now < expirationTime) {
-                    const timeLeft = (expirationTime - now) / 1000;
-                    await interaction.reply({
-                        content: `⏰ 잠시 기다려주세요! \`${command.data.name}\` 명령어를 다시 사용하려면 ${timeLeft.toFixed(1)}초 더 기다려야 합니다.`,
-                        ephemeral: true
-                    });
-                    return;
-                }
-            }
-            
-            timestamps.set(interaction.user.id, now);
-            setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
-            
-            // 명령어 실행
-            logger.command(`${interaction.user.tag}이(가) /${command.data.name} 명령어를 실행했습니다.`);
-            
-            // 명령어 로그 기록
-            await DatabaseUtils.createLog({
-                guildId: interaction.guildId,
-                userId: interaction.user.id,
-                action: 'command_executed',
-                details: {
-                    commandName: command.data.name,
-                    username: interaction.user.tag,
-                    channelId: interaction.channelId
-                },
-                level: 'info'
-            });
-            
+    
+    // 버튼 상호작용
+    else if (interaction.isButton()) {
+        await handleButtonInteraction(interaction);
+    }
+    
+    // 셀렉트 메뉴 상호작용
+    else if (interaction.isStringSelectMenu()) {
+        await handleSelectMenuInteraction(interaction);
+    }
+    
+    // 모달 상호작용
+    else if (interaction.isModalSubmit()) {
+        await handleModalInteraction(interaction);
+    }
+    
+    // 컨텍스트 메뉴 상호작용
+    else if (interaction.isContextMenuCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        
+        if (!command) {
+            logger.warn(`알 수 없는 컨텍스트 메뉴: ${interaction.commandName}`);
+            return;
+        }
+        
+        try {
+            logger.command(`${interaction.user.tag}이(가) ${interaction.commandName} 컨텍스트 메뉴 실행`);
             await command.execute(interaction);
-        }
-        
-        // 버튼 상호작용 처리
-        if (interaction.isButton()) {
-            await handleButtonInteraction(interaction);
-        }
-        
-        // 셀렉트 메뉴 상호작용 처리
-        if (interaction.isStringSelectMenu()) {
-            await handleSelectMenuInteraction(interaction);
-        }
-        
-        // 모달 상호작용 처리
-        if (interaction.isModalSubmit()) {
-            await handleModalInteraction(interaction);
-        }
-        
-    } catch (error) {
-        logger.error(`상호작용 처리 오류: ${error.message}`);
-        
-        // 에러 로그 기록
-        await DatabaseUtils.createLog({
-            guildId: interaction.guildId,
-            userId: interaction.user.id,
-            action: 'interaction_error',
-            details: {
-                error: error.message,
-                interactionType: interaction.type
-            },
-            level: 'error'
-        });
-        
-        const errorEmbed = {
-            color: 0xff0000,
-            title: '❌ 오류 발생',
-            description: '명령어 실행 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
-            thumbnail: { url: 'https://i.imgur.com/Sd8qK9c.gif' },
-            footer: {
-                text: 'Aimdot.dev',
-                icon_url: 'https://i.imgur.com/Sd8qK9c.gif'
-            },
-            timestamp: new Date().toISOString()
-        };
-        
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
-        } else {
-            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        } catch (error) {
+            logger.error(`컨텍스트 메뉴 실행 오류: ${error.message}`);
+            
+            const errorEmbed = {
+                color: 0xff0000,
+                title: '❌ 오류 발생',
+                description: '명령 실행 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.',
+                thumbnail: { url: 'https://i.imgur.com/Sd8qK9c.gif' },
+                footer: {
+                    text: 'Aimdot.dev',
+                    icon_url: 'https://i.imgur.com/Sd8qK9c.gif'
+                },
+                timestamp: new Date().toISOString()
+            };
+            
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
+            } else {
+                await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            }
         }
     }
 });
@@ -391,6 +385,10 @@ async function handleButtonInteraction(interaction) {
             await handler.execute(interaction, params);
         } else {
             logger.warn(`버튼 핸들러를 찾을 수 없음: ${type}`);
+            await interaction.reply({
+                content: '⚠️ 이 버튼의 기능을 찾을 수 없습니다.',
+                ephemeral: true
+            });
         }
     }
 }
@@ -407,6 +405,10 @@ async function handleSelectMenuInteraction(interaction) {
             await handler.execute(interaction, params);
         } else {
             logger.warn(`셀렉트 메뉴 핸들러를 찾을 수 없음: ${type}`);
+            await interaction.reply({
+                content: '⚠️ 이 메뉴의 기능을 찾을 수 없습니다.',
+                ephemeral: true
+            });
         }
     }
 }
@@ -423,9 +425,38 @@ async function handleModalInteraction(interaction) {
             await handler.execute(interaction, params);
         } else {
             logger.warn(`모달 핸들러를 찾을 수 없음: ${type}`);
+            await interaction.reply({
+                content: '⚠️ 이 양식의 처리 기능을 찾을 수 없습니다.',
+                ephemeral: true
+            });
         }
     }
 }
+
+// 메시지 생성 이벤트
+client.on('messageCreate', async (message) => {
+    // 봇의 메시지는 무시
+    if (message.author.bot) return;
+    
+    // DM 메시지 처리
+    if (message.channel.type === 'DM') {
+        logger.event(`DM 수신: ${message.author.tag} - ${message.content}`);
+        
+        // DM 로그 저장
+        try {
+            await DatabaseUtils.createLog({
+                action: 'dm_received',
+                userId: message.author.id,
+                details: {
+                    content: message.content,
+                    attachments: message.attachments.map(a => a.url)
+                }
+            });
+        } catch (error) {
+            logger.error(`DM 로그 저장 실패: ${error.message}`);
+        }
+    }
+});
 
 // 오류 이벤트 처리
 client.on('error', error => {
@@ -457,6 +488,11 @@ process.on('SIGTERM', () => {
     logger.info('봇을 종료합니다...');
     client.destroy();
     process.exit(0);
+});
+
+// 처리되지 않은 프로미스 거부
+process.on('unhandledRejection', (error) => {
+    logger.error(`처리되지 않은 프로미스 거부: ${error}`);
 });
 
 // 초기화 및 봇 시작

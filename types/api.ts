@@ -1,23 +1,14 @@
-// types/api.ts - API 응답 타입 통합 정의
+// types/api.ts - API 응답 타입 정의
 
-// 기본 사용자 정보 타입
-export interface BaseUser {
+// 사용자 타입
+export interface ApiUser {
   discordId: string
   username: string
   discriminator: string
-  avatar?: string
-  nickname?: string
-}
-
-// NextAuth 세션 사용자 타입 (확장된 정보)
-export interface SessionUser extends BaseUser {
-  id?: string
-  name?: string | null
-  email?: string | null
-  image?: string | null
-  status?: 'online' | 'offline' | 'away' | 'dnd'
-  lastActive?: Date
-  roles?: string[]
+  avatar?: string | null
+  nickname?: string | null
+  status: 'online' | 'offline' | 'away' | 'dnd'
+  lastActive?: string
 }
 
 // 봇 상태 타입
@@ -27,31 +18,24 @@ export interface BotStatus {
   guilds: number
   users: number
   latency: number
-  lastPing: Date
+  lastPing: string
   version: string
+  connectedAt?: string | null
 }
 
-// 접속 중인 사용자 타입
-export interface ConnectedUser extends BaseUser {
-  status: 'online' | 'offline' | 'away' | 'dnd'
-  lastActive: Date
-  joinedAt?: Date
-  roles?: string[]
-}
-
-// 활동 로그 타입
-export interface ActivityLog {
+// 로그 타입
+export interface ApiLog {
   id: string
-  type: 'login' | 'logout' | 'party_created' | 'party_joined' | 'user_joined' | 'user_left' | 'error' | 'warning' | 'command_used'
+  type: string
   message: string
-  username?: string
-  timestamp: Date
+  user?: string
+  timestamp: string
   severity: 'info' | 'warning' | 'error'
-  metadata?: Record<string, any>
+  data?: any
 }
 
-// 대시보드 통계 타입
-export interface DashboardStats {
+// 통계 타입
+export interface ApiStats {
   totalOnline: number
   totalUsers: number
   totalActivities: number
@@ -60,77 +44,175 @@ export interface DashboardStats {
 
 // 대시보드 API 응답 타입
 export interface DashboardApiResponse {
-  user: SessionUser
+  user: ApiUser
   bot: BotStatus
-  connectedUsers: ConnectedUser[]
-  recentLogs: ActivityLog[]
-  stats: DashboardStats
+  connectedUsers: ApiUser[]
+  recentLogs: ApiLog[]
+  stats: ApiStats
   timestamp: string
 }
 
 // API 에러 응답 타입
 export interface ApiErrorResponse {
   error: string
-  details?: string
-  code?: string
+  message?: string
+  statusCode?: number
+  timestamp?: string
 }
 
-// API 성공 응답 래퍼 타입
-export interface ApiSuccessResponse<T = any> {
-  success: true
-  data: T
+// 파티 타입
+export interface ApiParty {
+  id: string
+  title: string
+  game: string
+  description?: string
+  maxPlayers: number
+  currentPlayers: number
+  startTime: string
+  endTime?: string
+  status: 'waiting' | 'playing' | 'finished' | 'cancelled'
+  createdBy: ApiUser
+  participants: ApiUser[]
+  createdAt: string
+  updatedAt: string
+}
+
+// 스케줄 타입
+export interface ApiSchedule {
+  id: string
+  title: string
+  description?: string
+  startTime: string
+  endTime?: string
+  type: 'event' | 'maintenance' | 'stream' | 'other'
+  recurring?: boolean
+  recurrenceRule?: string
+  createdBy: ApiUser
+  createdAt: string
+  updatedAt: string
+}
+
+// 서버 설정 타입
+export interface ApiGuildSettings {
+  guildId: string
+  guildName: string
+  prefix?: string
+  language: string
+  welcomeChannel?: string
+  logChannel?: string
+  partyChannel?: string
+  autoRole?: string
+  features: {
+    parties: boolean
+    logging: boolean
+    automod: boolean
+    welcome: boolean
+  }
+  updatedAt: string
+}
+
+// 권한 타입
+export interface ApiPermission {
+  id: string
+  name: string
+  description: string
+  level: number
+  commands: string[]
+}
+
+// 역할 타입
+export interface ApiRole {
+  id: string
+  name: string
+  color: string
+  position: number
+  permissions: ApiPermission[]
+  memberCount: number
+}
+
+// 활동 로그 타입
+export interface ApiActivity {
+  id: string
+  type: 'command' | 'join' | 'leave' | 'message' | 'voice' | 'other'
+  action: string
+  user: ApiUser
+  guildId: string
+  channelId?: string
+  details?: any
   timestamp: string
 }
 
-// 통합 API 응답 타입
-export type ApiResponse<T = any> = ApiSuccessResponse<T> | ApiErrorResponse
+// 페이지네이션 타입
+export interface ApiPagination {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
 
-// Prisma User 모델과 API 사이의 변환 도우미 타입
-export interface PrismaUser {
+// 페이지네이션된 응답 타입
+export interface ApiPaginatedResponse<T> {
+  data: T[]
+  pagination: ApiPagination
+}
+
+// API 응답 래퍼 타입
+export interface ApiResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+  message?: string
+  timestamp: string
+}
+
+// 봇 명령어 타입
+export interface ApiBotCommand {
+  name: string
+  description: string
+  category: string
+  usage: string
+  examples?: string[]
+  cooldown?: number
+  permissions?: string[]
+  enabled: boolean
+}
+
+// 통계 차트 데이터 타입
+export interface ApiChartData {
+  labels: string[]
+  datasets: {
+    label: string
+    data: number[]
+    backgroundColor?: string
+    borderColor?: string
+  }[]
+}
+
+// 알림 타입
+export interface ApiNotification {
   id: string
-  discordId: string
-  username: string | null
-  discriminator: string | null
-  avatar: string | null
-  nickname: string | null
-  email: string | null
-  lastActive: Date | null
-  createdAt: Date
-  updatedAt: Date
+  type: 'info' | 'success' | 'warning' | 'error'
+  title: string
+  message: string
+  read: boolean
+  createdAt: string
+  expiresAt?: string
 }
 
-// Prisma 모델을 API 타입으로 변환하는 유틸리티 타입
-export type UserFromPrisma = Pick<PrismaUser, 'discordId' | 'username' | 'discriminator' | 'avatar' | 'nickname' | 'lastActive'>
-
-// 타입 가드 함수들
-export function isValidUser(user: any): user is BaseUser {
-  return (
-    typeof user === 'object' &&
-    user !== null &&
-    typeof user.discordId === 'string' &&
-    typeof user.username === 'string' &&
-    typeof user.discriminator === 'string' &&
-    (user.avatar === undefined || typeof user.avatar === 'string') &&
-    (user.nickname === undefined || typeof user.nickname === 'string')
-  )
-}
-
-export function isConnectedUser(user: any): user is ConnectedUser {
-  return (
-    isValidUser(user) &&
-    ['online', 'offline', 'away', 'dnd'].includes(user.status) &&
-    user.lastActive instanceof Date
-  )
-}
-
-export function isBotStatus(status: any): status is BotStatus {
-  return (
-    typeof status === 'object' &&
-    status !== null &&
-    ['online', 'offline', 'maintenance'].includes(status.status) &&
-    typeof status.uptime === 'number' &&
-    typeof status.guilds === 'number' &&
-    typeof status.users === 'number' &&
-    typeof status.latency === 'number'
-  )
+// 사용자 설정 타입
+export interface ApiUserSettings {
+  userId: string
+  theme: 'light' | 'dark' | 'system'
+  language: string
+  notifications: {
+    email: boolean
+    discord: boolean
+    web: boolean
+  }
+  privacy: {
+    showOnlineStatus: boolean
+    showActivity: boolean
+    allowDirectMessages: boolean
+  }
+  updatedAt: string
 }
